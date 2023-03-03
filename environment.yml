@@ -1,0 +1,30 @@
+# Used by miniconda to build development environment
+#
+# Steps to build environment (using miniconda):
+#   1. Install miniconda (**do not add to path**)
+#   2. Clone parsely to local machine
+#   3. Run the commands below in order
+#
+# Commands to build environment:
+#   cd */miniconda3/Scripts
+#   activate
+#   cd */parsely
+#   conda env create -f environment.yml
+#   activate mbes_parse
+#   pip install -e .
+
+name: parsely
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Build Dependencies
+  - pip
+  - setuptools
+  - wheel
+
+  # Package Dependencies
+  - python>=3.8,<3.9
+  - attrs>16.0,<=21.2
+  - numpy
+  - netcdf4

@@ -1,0 +1,8 @@
+###### Requirements without Version Specifiers ######
+attrs
+numpy
+netcdf4
+setuptools
+wheel
+
+###### Requirements with Version Specifiers ######
