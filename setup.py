@@ -30,7 +30,7 @@ def find_version(*file_paths):
 #                          POPULATE SETUP
 
 setup(
-    name="mbes_parse",
+    name="parsely",
     version=find_version("parsely", "__init__.py"),
     license="None",
 
