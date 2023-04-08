@@ -10,14 +10,14 @@ from parsely.kmall.datagrams import kmall_dispatch
 
 logger = logging.getLogger(__name__)
 
+file_types = {
+    "kmall": ["kmall file", b'#MRZ'],
+    "kmwcd": ["water column file", b'#MWC']
+}
+
 
 class KmallFileReader(AbstractFileReader):
     """ Class for reading/extracting data from Kongsberg .kmall/.kmwcd files"""
-
-    file_types = {
-        "kmall": "kmall file",
-        "kmwcd": "water column file"
-    }
 
     def __init__(self, file_path: Path):
         super().__init__(file_path)
@@ -25,6 +25,14 @@ class KmallFileReader(AbstractFileReader):
 
         self.valid = self._validate_file()
         self.map_file()
+
+    @property
+    def file_path(self) -> Path:
+        return self._file_path
+
+    @property
+    def extension(self) -> str:
+        return self.file_path.parts[-1].split('.')[-1]
 
     def map_file(self):
         """ Maps the datagram packets in the file
@@ -44,7 +52,7 @@ class KmallFileReader(AbstractFileReader):
         dg_map = dict()
         with self.file_path.open(mode='rb') as self.file:
             self.file.seek(0, 0)
-            loc = self.file.tell()
+
             # Loop through file, adding datagrams to the map
             while True:
                 chunk = self.file.read(kmall_dispatch[b'KMALL'].header_size)
@@ -83,15 +91,17 @@ class KmallFileReader(AbstractFileReader):
                                              record_index[:, np.newaxis], axis=0)
                     dg_map[map_id] = np.squeeze(tmp).tolist()
 
-            # Loop through mrz datagrams, getting statistics
+            # Loop through ping datagrams, getting statistics
+            dg_id = file_types[self.extension][1]
+
             ping_index = list()
             num_dg_in_ping = list()
             file_max_beams = 0
             file_max_sectors = 0
-            for index, dg_info in enumerate(dg_map[b'#MRZ']):
+            for index, dg_info in enumerate(dg_map[dg_id]):
                 self.file.seek(dg_info.file_location)
                 start_dg, num_dg, num_tx_sector, max_beams = \
-                    kmall_dispatch[b'#MRZ'].mrz_stats(self.file)
+                    kmall_dispatch[dg_id].stats(self.file)
 
                 if start_dg is True:
                     ping_index.append(index)
@@ -104,7 +114,7 @@ class KmallFileReader(AbstractFileReader):
         self.max_tx_sectors = file_max_sectors
         self.max_beams = file_max_beams
 
-        if self.number_of_pings != len(dg_map[b'#MRZ']):
+        if self.number_of_pings != len(dg_map[dg_id]):
             self.datagram_splits = True
             self.split_start_index = ping_index
             self.split_num_dgs = num_dg_in_ping
@@ -124,7 +134,7 @@ class KmallFileReader(AbstractFileReader):
         This method of reading datagrams does minimal context management. When at end of
         file, the method will return an empty byte string. If a 'get_data' type
         method is used, read datagram will open a new file instance and return to the
-        file location from the last call of this method, in otherwords it picks up
+        file location from the last call of this method, in other words it picks up
         where it left off.
         """
 
@@ -212,12 +222,12 @@ class KmallFileReader(AbstractFileReader):
 
         return selected_datagrams
 
-    def get_position(self, source: bytes = b'#MRZ'):
+    def get_position(self, source: bytes = b'#SPO'):
         """ Extracts all position records within file
 
         Input:
             source      - Datagram identifier used to indicate which datagrams
-                            to read. Default is mrz datagram
+                            to read. Default is SPO datagram
 
         Output:
             record_datetime - list of datetime objects corresponding to
@@ -228,7 +238,7 @@ class KmallFileReader(AbstractFileReader):
             epgs            - epgs code for position values
 
         Note on source:
-            The MRZ datagram provides position at time of transmission (mid
+            The MRZ datagram provides position at time of transmission (mid-
             point of first tx transmission). Ping time is the same as
             datagram timestamp. For the SPO, CPO, and SKM datagrams,
             this function provides the sensor timestamp, not the timestamp
@@ -874,7 +884,7 @@ class KmallFileReader(AbstractFileReader):
             samp_rate = samp_rate[0]
 
         return np.asarray(record_datetime), snippets, center_sample, \
-               start_sample, samp_rate
+            start_sample, samp_rate
 
     def get_svp(self):
         """ Extract the Sound speed profiles from the file
@@ -914,14 +924,13 @@ class KmallFileReader(AbstractFileReader):
 
     # Private Methods
     def _validate_file(self):
-        file_parts = self.file_path.parts
-        extension = file_parts[-1].split('.')[-1]
+        extension = self.extension
 
-        if extension not in self.file_types.keys():
+        if extension not in file_types.keys():
             msg = f"Invalid file extension: {self.file_path.absolute()}"
             raise OSError(msg)
         else:
-            self.file_type = self.file_types[extension]
+            self.file_type = file_types[extension][0]
 
         if self.file_path.exists() is False:
             msg = f"File does not exist: {self.file_path.absolute()}"

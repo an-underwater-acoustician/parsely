@@ -3,8 +3,9 @@ import logging
 import struct
 
 from datetime import datetime, timedelta
+
+import numpy as np
 from numpy.typing import NDArray
-from numpy import asarray, empty, nan
 from typing import BinaryIO, ClassVar, List, Optional
 
 from parsely._internal.metadata_mappings import MetadataKeys as MdK
@@ -1142,7 +1143,7 @@ class MRZSeabedImage:
                                        factory=list)
     number_samples: List[int] = attr.ib(factory=list)
     snippets: NDArray = attr.ib(metadata={MdK.UNITS: Units.DB},
-                                default=empty(shape=(1, 1)))
+                                default=np.empty(shape=(1, 1)))
 
     @property
     def number_of_snippets_in_ping(self):
@@ -1278,9 +1279,9 @@ class MRZ:
         sbi_2 = sbi_1 + sbi_sz
         sbi_struct = struct.unpack(sbi_fmt, data[sbi_1:sbi_2])
 
-        seabed_imagery.snippets = empty(shape=(rx_info.max_number_soundings,
-                                               max(seabed_imagery.number_samples)))
-        seabed_imagery.snippets.fill(nan)
+        seabed_imagery.snippets = np.empty(shape=(rx_info.max_number_soundings,
+                                           max(seabed_imagery.number_samples)))
+        seabed_imagery.snippets.fill(np.nan)
         sb_index_1 = 0
         # TODO: I don't think this can handle extra detections
         for ii in range(len(seabed_imagery.number_samples)):
@@ -1288,8 +1289,7 @@ class MRZ:
             num_smp = seabed_imagery.number_samples[ii]
             sb_index_2 = sb_index_1 + num_smp
             beam_samps = sbi_struct[sb_index_1:sb_index_2]
-            seabed_imagery.snippets[beam_index, 0:num_smp] = asarray(
-                beam_samps) / 10.0
+            seabed_imagery.snippets[beam_index, 0:num_smp] = np.asarray(beam_samps) / 10.0
             sb_index_1 = sb_index_2
         loc += sbi_sz
         checksum(data=data, dg_sz=km_header.size, chk_st=loc)
@@ -1310,7 +1310,7 @@ class MRZ:
         file_obj.seek(sz - 4, 1)
 
     @classmethod
-    def mrz_stats(cls, file_object: BinaryIO):
+    def stats(cls, file_object: BinaryIO):
         """ Extracts some useful data about the ping
 
         Assumes we are at the start of a MRZ datagram. Typically, used in
@@ -1448,8 +1448,8 @@ class MWCData:
     high_res_detect_sample: List[float] = attr.ib(
         metadata={MdK.UNITS: Units.SAMPLE},
         factory=list)
-    samples: List[float] = attr.ib(metadata={MdK.UNITS: Units.DB},
-                                   factory=list)
+    samples: NDArray = attr.ib(metadata={MdK.UNITS: Units.DB},
+                               factory=list)
 
     @classmethod
     def parse(cls, data: bytes, loc: int, num_beams: int, num_bytes_beam: int,
@@ -1469,6 +1469,8 @@ class MWCData:
 
         wcd_1 = loc
         wcd_data = cls()
+        max_samps = -1000
+        samples = list()
         for ii in range(num_beams):
             wcd_2 = wcd_1 + wcd_sz
             wcd_struct = struct.unpack(cls.fmt, data[wcd_1:wcd_2])
@@ -1478,6 +1480,7 @@ class MWCData:
             wcd_data.detection_sample.append(wcd_struct[2])
             wcd_data.tx_sector_number.append(wcd_struct[3])
             wcd_num_samps_beam = wcd_struct[4]
+            max_samps = np.maximum(max_samps, wcd_num_samps_beam)
             wcd_data.number_of_samples.append(wcd_num_samps_beam)
             wcd_data.high_res_detect_sample.append(wcd_struct[5])
 
@@ -1486,10 +1489,16 @@ class MWCData:
             blk_1 = wcd_1 + num_bytes_beam
             blk_2 = blk_1 + blk_sz
             blk_struct = struct.unpack(blk_fmt, data[blk_1:blk_2])
-            wcd_data.samples.append(asarray(
-                blk_struct) / 2.0)  # TODO: Verify this is correct behavior
+            samples.append(np.asarray(blk_struct) / 2.0)
+            # TODO: ^^^^ Verify this is correct behavior
 
             wcd_1 = wcd_1 + num_bytes_beam + blk_sz
+
+        # Convert WCD sample list to numpy array
+        wcd_data.samples = np.empty(shape=(max_samps, num_beams))
+        wcd_data.samples.fill(np.nan)
+        for beam, samps in enumerate(samples):
+            wcd_data.samples[:wcd_data.number_of_samples[beam], beam] = samps[np.newaxis]
 
         # Calc new loc
         wcd_off = (num_bytes_beam * num_beams)
@@ -1526,6 +1535,51 @@ class MWC:
         # noinspection PyArgumentList
         return cls(header=km_header, partition=part, mb_body=mbody,
                    tx_info=tx_info, rx_info=rx_info, wcd_data=wcd_data)
+
+    @classmethod
+    def skip(cls, file_obj: BinaryIO):
+        _skip_from_datagram(file_obj)
+
+    @classmethod
+    def stats(cls, file_object: BinaryIO):
+        """ Extracts some useful data about the ping
+
+                Assumes we are at the start of a MWC datagram. Typically, used in
+                map_file function. will move file pointer to end of datagram
+                """
+
+        loc = file_object.tell()
+        # Skip Header
+        Kmall.skip(file_obj=file_object)
+
+        # Read Partition
+        m_sz = struct.calcsize(MPartition.fmt)
+        mrz_prt, _ = MPartition.parse(data=file_object.read(m_sz), loc=0)
+        if mrz_prt.datagram_number == 1:
+            start_dg = True
+        else:
+            start_dg = False
+
+        # Skip MBody
+        MBody.skip(file_obj=file_object)
+
+        # Get tx struct size from PingInfo
+        fmt = MWCTxInfo.fmt_txi
+        tx_info = struct.unpack(fmt, file_object.read(struct.calcsize(fmt)))
+        num_bytes_tx = tx_info[0]
+        num_tx_sectors = tx_info[1]
+        num_bytes_tx_sector = tx_info[2]
+
+        # Skip TxSector
+        file_object.seek(num_tx_sectors * num_bytes_tx, 1)
+
+        # Read Num beams
+        fmt = MWCRXInfo.fmt[:3]
+        rx_info = struct.unpack(fmt, file_object.read(struct.calcsize(fmt)))
+        max_beams = rx_info[1]
+        file_object.seek(loc, 0)
+        cls.skip(file_obj=file_object)
+        return start_dg, mrz_prt.number_of_datagrams, num_tx_sectors, max_beams
 
 
 # ### External Sensor Output Datagrams ###
@@ -2528,6 +2582,15 @@ def _skip_from_struct(file_obj: BinaryIO):
     """ Skip over structure using struct size in datagram """
 
     fmt = '<H'
+    fmt_sz = struct.calcsize(fmt)
+    bytes_to_skip = struct.unpack(fmt, file_obj.read(fmt_sz))[0]
+    file_obj.seek(bytes_to_skip - fmt_sz, 1)
+
+
+def _skip_from_datagram(file_obj: BinaryIO):
+    """ Skip over entire datagram"""
+
+    fmt = '<I'
     fmt_sz = struct.calcsize(fmt)
     bytes_to_skip = struct.unpack(fmt, file_obj.read(fmt_sz))[0]
     file_obj.seek(bytes_to_skip - fmt_sz, 1)

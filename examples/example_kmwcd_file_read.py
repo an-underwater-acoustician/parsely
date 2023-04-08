@@ -8,9 +8,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-# #### KMALL File Reader Example Script ####
+# #### KMWCD File Reader Example Script ####
 # This script is used to test/inspect the functionality of the
-# kmall_file_reader.
+# kmall_file_reader for kmwcd files.
 # The user/reader is encouraged to run this scrip using debug mode.
 
 # Get path to file
@@ -19,7 +19,7 @@ data_dir = dpath.parents[1].joinpath("data").joinpath("download")
 
 # We take the first file in the directory, the index can be changed if
 # there are other files
-file_path = list(data_dir.rglob("*.kmall"))[0]
+file_path = list(data_dir.rglob("*.kmwcd"))[0]
 logger.debug(f"Data file: {file_path.absolute()}")
 
 # Create a kmall file object
@@ -28,11 +28,11 @@ km_file = KmallFileReader(file_path)
 # Use map to get reference to first datagram of a type and read it into memory.
 # Because get_datagrams_from_map_entry can accept a list of map_entries, the output
 # is always a list.
-dg_id = b'#MRZ'
+dg_id = b'#MWC'
 logger.debug(f"Number of {dg_id} datagrams: {len(km_file.map[dg_id])}")
-mrz_0 = km_file.map[b'#MRZ'][0]
-mrz_dg = km_file.get_datagrams_from_map_entry(mrz_0)
-mrz_dg = mrz_dg[0]
+mwc_0 = km_file.map[dg_id][0]
+mwc_dg = km_file.get_datagrams_from_map_entry(mwc_0)
+mwc_dg = mwc_dg[0]
 
 # Using km_file to extract data in a lower level loop. Just grab the first 15 datagrams.
 logger.debug(" Reading the first 15 datagrams ")

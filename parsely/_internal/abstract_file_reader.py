@@ -22,8 +22,8 @@ class AbstractFileReader(ABC):
 
         # File attributes
         self.file: Optional[BinaryIO] = None
-        self.file_path: Optional[Path] = file_path
-        self.file_size: Optional[int] = None
+        self._file_path: Optional[Path] = file_path
+        self._file_size: Optional[int] = None
         self.file_type: Optional[str] = None
         self.valid: bool = False
 
