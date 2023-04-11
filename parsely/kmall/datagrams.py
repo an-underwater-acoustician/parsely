@@ -8,8 +8,8 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import BinaryIO, ClassVar, List, Optional
 
-from parsely._internal.metadata_mappings import MetadataKeys as MdK
-from parsely._internal.metadata_mappings import Units
+from parsely.internal.metadata_mappings import MetadataKeys as MdK
+from parsely.internal.metadata_mappings import Units
 from parsely.nmea.nmea import GGA, ZDA
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,14 @@ null_float = -999.0
 
 
 # #### Datagram Objects ####
+# *** Note: Dataclass objects cannot contain child dataclasses without prior
+# declaration. As a result, all datagrams are organized as such:
+#   class child class:  (sub structure)
+#       ...
+#
+#   class parent class: (primary datagram)
+#       ...
+#
 
 # ### Datagram Header ###
 @attr.s(auto_attribs=True)

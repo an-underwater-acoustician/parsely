@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 from typing import Union, List
 
-from parsely._internal.abstract_file_reader import AbstractFileReader, _AbstractMapEntry
+from parsely.internal.abstract_file_reader import AbstractFileReader, _AbstractMapEntry
 from parsely.kmall.datagrams import kmall_dispatch
 
 logger = logging.getLogger(__name__)

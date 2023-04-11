@@ -3,8 +3,8 @@ import logging
 
 from datetime import datetime, date, time
 
-from parsely._internal.metadata_mappings import MetadataKeys as MdK
-from parsely._internal.metadata_mappings import Units
+from parsely.internal.metadata_mappings import MetadataKeys as MdK
+from parsely.internal.metadata_mappings import Units
 
 
 logger = logging.getLogger(__name__)
